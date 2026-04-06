@@ -270,6 +270,8 @@ export default function HackerBachelorQuest() {
   const [started, setStarted] = useState(false);
   const [phase, setPhase] = useState(0);
   const [firstMistakeUsed, setFirstMistakeUsed] = useState(false);
+  const [mistakeCount, setMistakeCount] = useState(0);
+  const [hardLock, setHardLock] = useState(false);
   const [meltdown, setMeltdown] = useState(false);
   const [shake, setShake] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -389,26 +391,44 @@ export default function HackerBachelorQuest() {
     setTimeout(() => setMeltdown(false), 1600);
   };
 
+  const triggerHardCrash = () => {
+    setShake(true);
+    setMeltdown(true);
+    setHardLock(true);
+    setTimeout(() => setShake(false), 700);
+  };
+
   const handleMistake = (setter, resetFn) => {
     setter(true);
+    const nextMistakeCount = mistakeCount + 1;
+    setMistakeCount(nextMistakeCount);
+
+    if (nextMistakeCount >= 3) {
+      triggerHardCrash();
+      setTimeout(() => setter(false), 900);
+      return 'crash';
+    }
+
     const isForgiven = !firstMistakeUsed;
 
     if (isForgiven) {
       setFirstMistakeUsed(true);
       triggerVisualFailure();
       setTimeout(() => setter(false), 900);
-      return true;
+      return 'forgiven';
     }
 
     setShake(true);
     setTimeout(() => setShake(false), 420);
     setTimeout(() => setter(false), 700);
     if (resetFn) setTimeout(resetFn, 320);
-    return false;
+    return 'strict';
   };
 
   const resetAll = () => {
     setStarted(false);
+    setMistakeCount(0);
+    setHardLock(false);
     setPhase(0);
     setFirstMistakeUsed(false);
     setMeltdown(false);
@@ -457,13 +477,14 @@ export default function HackerBachelorQuest() {
   };
 
   const toggleCipherLetter = (letter) => {
-    if (cipherSolved) return;
+    if (cipherSolved || hardLock) return;
     setCipherSelection((prev) => {
       const next = [...prev, letter].slice(0, 6);
       const joined = next.join('');
       if (!VECTOR_WORD.startsWith(joined)) {
-        const forgiven = handleMistake(setCipherError, () => setCipherSelection([]));
-        return forgiven ? prev : [];
+        const result = handleMistake(setCipherError, () => setCipherSelection([]));
+        if (result === 'forgiven') return prev;
+        return [];
       }
       if (joined === VECTOR_WORD) setCipherSolved(true);
       return next;
@@ -471,7 +492,7 @@ export default function HackerBachelorQuest() {
   };
 
   const togglePacket = (packet) => {
-    if (packetSolved) return;
+    if (packetSolved || hardLock) return;
     let next;
     if (packetSelection.includes(packet.id)) {
       next = packetSelection.filter((id) => id !== packet.id);
@@ -481,8 +502,8 @@ export default function HackerBachelorQuest() {
 
     const invalidPicked = next.some((id) => !DECOY_PACKETS.find((p) => p.id === id)?.valid);
     if (invalidPicked) {
-      const forgiven = handleMistake(setPacketError, () => setPacketSelection([]));
-      if (!forgiven) setPacketSelection([]);
+      const result = handleMistake(setPacketError, () => setPacketSelection([]));
+      if (result === 'strict' || result === 'crash') setPacketSelection([]);
       return;
     }
 
@@ -493,12 +514,12 @@ export default function HackerBachelorQuest() {
   };
 
   const pushMemory = (shape) => {
-    if (memorySolved) return;
+    if (memorySolved || hardLock) return;
     const next = [...memoryInput, shape].slice(0, MEMORY_SEQUENCE.length);
     const partial = MEMORY_SEQUENCE.slice(0, next.length).join('');
     if (next.join('') !== partial) {
-      const forgiven = handleMistake(setMemoryError, () => setMemoryInput([]));
-      if (!forgiven) setMemoryInput([]);
+      const result = handleMistake(setMemoryError, () => setMemoryInput([]));
+      if (result === 'strict' || result === 'crash') setMemoryInput([]);
       return;
     }
     setMemoryInput(next);
@@ -506,12 +527,12 @@ export default function HackerBachelorQuest() {
   };
 
   const toggleCell = (cell) => {
-    if (gridSolved) return;
+    if (gridSolved || hardLock) return;
     const next = [...selectedCells, cell.id];
     const expected = SAFE_PATH.slice(0, next.length);
     if (!cell.isSafe || JSON.stringify(next) !== JSON.stringify(expected)) {
-      const forgiven = handleMistake(setGridError, () => setSelectedCells([]));
-      if (!forgiven) setSelectedCells([]);
+      const result = handleMistake(setGridError, () => setSelectedCells([]));
+      if (result === 'strict' || result === 'crash') setSelectedCells([]);
       return;
     }
     setSelectedCells(next);
@@ -519,6 +540,7 @@ export default function HackerBachelorQuest() {
   };
 
   const answerQuiz = (option) => {
+    if (hardLock) return;
     const current = QUIZ_QUESTIONS[quizIndex];
     if (!current) return;
 
@@ -587,6 +609,40 @@ export default function HackerBachelorQuest() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center">
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }} className="rounded-full border border-emerald-400/20 p-6">
               <RefreshCcw size={40} className="text-emerald-300" />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {hardLock && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center px-4"
+          >
+            <motion.div
+              initial={{ scale: 0.94, y: 14 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-2xl rounded-[28px] border border-red-400/30 bg-black/80 p-6 sm:p-8 shadow-[0_0_80px_rgba(255,0,0,0.14)]"
+            >
+              <div className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-red-300/70">critical system failure</div>
+              <h2 className="mt-4 text-2xl sm:text-4xl font-bold text-red-200">Система заблокирована</h2>
+              <p className="mt-4 text-sm sm:text-base text-red-100/75 leading-relaxed max-w-xl">
+                Допущено слишком много ошибок. Маршрут потерян, текущая сессия аварийно завершена. Чтобы попробовать снова, нужно перезапустить квест с самого начала.
+              </p>
+              <div className="mt-4 rounded-2xl border border-red-400/15 bg-red-500/5 p-4 text-sm text-red-100/75">
+                Ошибок: <span className="font-bold text-red-200">{mistakeCount}</span>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={restartMission}
+                className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-6 py-4 text-xs sm:text-sm uppercase tracking-[0.28em] text-red-200"
+              >
+                начать сначала
+              </motion.button>
             </motion.div>
           </motion.div>
         )}
