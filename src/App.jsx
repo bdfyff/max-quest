@@ -391,16 +391,20 @@ export default function HackerBachelorQuest() {
 
   const handleMistake = (setter, resetFn) => {
     setter(true);
-    if (!firstMistakeUsed) {
+    const isForgiven = !firstMistakeUsed;
+
+    if (isForgiven) {
       setFirstMistakeUsed(true);
       triggerVisualFailure();
       setTimeout(() => setter(false), 900);
-      return;
+      return true;
     }
+
     setShake(true);
     setTimeout(() => setShake(false), 420);
     setTimeout(() => setter(false), 700);
     if (resetFn) setTimeout(resetFn, 320);
+    return false;
   };
 
   const resetAll = () => {
@@ -458,8 +462,8 @@ export default function HackerBachelorQuest() {
       const next = [...prev, letter].slice(0, 6);
       const joined = next.join('');
       if (!VECTOR_WORD.startsWith(joined)) {
-        handleMistake(setCipherError, () => setCipherSelection([]));
-        return firstMistakeUsed ? [] : prev;
+        const forgiven = handleMistake(setCipherError, () => setCipherSelection([]));
+        return forgiven ? prev : [];
       }
       if (joined === VECTOR_WORD) setCipherSolved(true);
       return next;
@@ -477,8 +481,8 @@ export default function HackerBachelorQuest() {
 
     const invalidPicked = next.some((id) => !DECOY_PACKETS.find((p) => p.id === id)?.valid);
     if (invalidPicked) {
-      handleMistake(setPacketError, () => setPacketSelection([]));
-      if (!firstMistakeUsed) return;
+      const forgiven = handleMistake(setPacketError, () => setPacketSelection([]));
+      if (!forgiven) setPacketSelection([]);
       return;
     }
 
@@ -493,8 +497,8 @@ export default function HackerBachelorQuest() {
     const next = [...memoryInput, shape].slice(0, MEMORY_SEQUENCE.length);
     const partial = MEMORY_SEQUENCE.slice(0, next.length).join('');
     if (next.join('') !== partial) {
-      handleMistake(setMemoryError, () => setMemoryInput([]));
-      if (!firstMistakeUsed) return;
+      const forgiven = handleMistake(setMemoryError, () => setMemoryInput([]));
+      if (!forgiven) setMemoryInput([]);
       return;
     }
     setMemoryInput(next);
@@ -506,8 +510,8 @@ export default function HackerBachelorQuest() {
     const next = [...selectedCells, cell.id];
     const expected = SAFE_PATH.slice(0, next.length);
     if (!cell.isSafe || JSON.stringify(next) !== JSON.stringify(expected)) {
-      handleMistake(setGridError, () => setSelectedCells([]));
-      if (!firstMistakeUsed) return;
+      const forgiven = handleMistake(setGridError, () => setSelectedCells([]));
+      if (!forgiven) setSelectedCells([]);
       return;
     }
     setSelectedCells(next);
@@ -517,22 +521,20 @@ export default function HackerBachelorQuest() {
   const answerQuiz = (option) => {
     const current = QUIZ_QUESTIONS[quizIndex];
     if (!current) return;
+
     if (option === current.correct) {
       const nextCorrect = quizCorrectCount + 1;
       setQuizCorrectCount(nextCorrect);
+      setQuizError(false);
       if (quizIndex === QUIZ_QUESTIONS.length - 1) {
         setQuizSolved(true);
       } else {
         setQuizIndex((v) => v + 1);
       }
-    } else {
-      handleMistake(setQuizError, null);
-      if (quizIndex === QUIZ_QUESTIONS.length - 1) {
-        setQuizSolved(true);
-      } else {
-        setQuizIndex((v) => v + 1);
-      }
+      return;
     }
+
+    handleMistake(setQuizError, null);
   };
 
   const handleFinalUnlock = () => {
